@@ -1,0 +1,103 @@
+: start
+	jump main
+
+: attribution
+	0x20 # ' '
+	0x54 # 'T'
+	0x72 # 'r'
+	0x6F # 'o'
+	0x6E # 'n'
+	0x69 # 'i'
+	0x78 # 'x'
+	0x20 # ' '
+	
+: imageok
+	0xEA 0xAC 0xAA 0xEA
+: imagefalse
+	0xCE 0xAA 0xAA 0xAE
+
+:macro zero-reg-check R {
+	if R != 0 then jump init-error
+}
+
+: main
+	clear
+	
+: all-checks
+
+	
+: init-check
+#	v0 := 1 # uncomment to fail
+	zero-reg-check vf
+	zero-reg-check ve
+	zero-reg-check vd
+	zero-reg-check vc
+	zero-reg-check vb
+	zero-reg-check va
+	zero-reg-check v9
+	zero-reg-check v8
+	zero-reg-check v7
+	zero-reg-check v6
+	zero-reg-check v5
+	zero-reg-check v4
+	zero-reg-check v3
+	zero-reg-check v2
+	zero-reg-check v1
+	zero-reg-check v0
+	
+	jump all-checks-passed
+
+
+: all-checks-passed
+	v0 := 0xA
+	v1 := 8
+    v2 := 0  
+	
+	i := 0x5A # 'A'
+	sprite v2 v2 5
+	
+	v1 := key
+
+    i := imageok
+
+    if v1 != v0 then i := imagefalse
+	v1 := 8
+	sprite v2 v1 5
+	
+
+: all-errors
+	
+: init-error
+	v0 := 0
+	v1 := 0
+	
+	v0 := 0xE
+	i := hex v0 # 'E'
+	
+	v0 := 0
+	sprite v0 v1 5
+	
+	v0 += 5
+	
+	i := letter-r # 'R'
+	sprite v0 v1 5
+	
+	v0 += 5
+	sprite v0 v1 5
+
+
+: all-data
+
+: letter-k
+ 	0x90
+ 	0xA0
+ 	0xC0
+ 	0xA0
+	0x90
+	
+: letter-r
+	0xE0
+	0x90
+	0xE0
+	0x90
+	0x90
