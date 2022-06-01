@@ -2,25 +2,13 @@ package chip8
 
 import (
 	"encoding/binary"
-	"sync"
+	"log"
+	"math/rand"
 	"time"
 )
 
-// TODO make this interface time and move it to tui package
-// type Display interface {
-// 	SetPixel(x, y int)
-// }
-
-type Address uint16
-
-// TODO maybe limit stack
-type Stack struct {
-	addr []Address
-	m    sync.Mutex
-}
-
-// Machine represents our Chip8 Virtual machine
-type Machine struct {
+// CPU represents our Chip8 Virtual machine
+type CPU struct {
 	// Memory represents the available memory on our machine.
 	Memory []byte
 
@@ -49,11 +37,24 @@ type Machine struct {
 
 	// Font used to load our font.
 	Font [][]byte
+
+	// Key data channel
+	Key         chan string
+	Take        chan uint16
+	PressedKeys Keys
+}
+
+// Cycle represents the CPU cycle of fetching and executing instructions.
+func (m *CPU) Cycle() {
+	for {
+		code := m.Fetch()
+		m.Decode(code)
+		time.Sleep(time.Second / time.Duration(m.Frequency))
+	}
 }
 
 // Fetch fetches the next instruction from the memory location from the PC.
-func (m *Machine) Fetch() uint16 {
-	// get addr from PC
+func (m *CPU) Fetch() uint16 {
 	instruction := m.Memory[m.PC : m.PC+2]
 
 	m.PC += 2
@@ -61,25 +62,8 @@ func (m *Machine) Fetch() uint16 {
 	return binary.BigEndian.Uint16(instruction)
 }
 
-// LoadFont loads the font for drawing sprites in memory
-// from address 0x050 to 0x09F
-func (m *Machine) LoadFont() {
-	for y, char := range m.Font {
-		for x, snippet := range char {
-			index := 0x50 + x + y*5
-			m.Memory[index] = snippet
-		}
-	}
-}
-
-// Cycle represents the CPU cycle of fetching and executing instructions.
-func (m *Machine) Cycle() {
-	code := m.Fetch()
-	m.Decode(code)
-}
-
 // Decode decodes and executes the provided opcode
-func (m *Machine) Decode(code uint16) {
+func (m *CPU) Decode(code uint16) {
 	// Extract important values
 	vx, vy := code&0x0F00>>(4*2), code&0x00F0>>(4*1)
 	n := code & 0x000F
@@ -104,40 +88,86 @@ func (m *Machine) Decode(code uint16) {
 		m.Stack.Push(m.PC)
 		m.PC = Address(nnn)
 	case 0x3000:
-		if m.Memory[vx] == byte(nn) {
+		if m.Registers[vx] == byte(nn) {
 			m.PC += 2
 		}
 	case 0x4000:
-		if m.Memory[vx] != byte(nn) {
+		if m.Registers[vx] != byte(nn) {
 			m.PC += 2
 		}
 	case 0x5000:
 		switch code & 0x000F {
 		case 0x0:
-			if m.Memory[vx] == m.Memory[vy] {
+			if m.Registers[vx] == m.Registers[vy] {
 				m.PC += 2
 			}
 		}
 	case 0x6000:
 		// 6XNN: Set
-		// log.Println(nn, vx)
 		m.Registers[vx] = byte(nn)
 	case 0x7000:
 		// 7XNN: Add
 		m.Registers[vx] += byte(nn)
 	case 0x8000:
+		switch code & 0x000F {
+		case 0x0:
+			m.Registers[vx] = m.Registers[vy]
+		case 0x1:
+			m.Registers[vx] = m.Registers[vx] | m.Registers[vy]
+		case 0x2:
+			m.Registers[vx] = m.Registers[vx] & m.Registers[vy]
+		case 0x3:
+			m.Registers[vx] = m.Registers[vx] ^ m.Registers[vy]
+		case 0x4:
+			sum := m.Registers[vx] + m.Registers[vy]
+			if sum > 0xFF {
+				m.Registers[0xF] = 1
+			}
+			m.Registers[vx] = sum
+
+		case 0x5:
+			m.Registers[vx] = m.Registers[vx] - m.Registers[vy]
+			if m.Registers[vx] > m.Registers[vy] {
+				m.Registers[0xF] = 1
+			} else {
+				m.Registers[0xF] = 0
+			}
+		case 0x7:
+			m.Registers[vx] = m.Registers[vy] - m.Registers[vx]
+			if m.Registers[vx] > m.Registers[vy] {
+				m.Registers[0xF] = 1
+			} else {
+				m.Registers[0xF] = 0
+			}
+
+		case 0x6:
+			m.Registers[vx] = m.Registers[vy]
+			lsb := m.Registers[vx] & 0x1
+			m.Registers[vx] >>= 1
+			m.Registers[0xF] = lsb
+
+		case 0xE:
+			m.Registers[vx] = m.Registers[vy]
+			msb := m.Registers[vx] & 0x80
+			m.Registers[vx] <<= 1
+			m.Registers[0xF] = msb >> 7
+		}
 	case 0x9000:
 		switch code & 0x000F {
 		case 0x0:
-			if m.Memory[vx] != m.Memory[vy] {
+			if m.Registers[vx] != m.Registers[vy] {
 				m.PC += 2
 			}
 		}
 	case 0xA000:
 		m.Index = Address(nnn)
-		// panic(m.Memory[m.Index:])
 	case 0xB000:
+		// BNNN: Jump with offset
+		m.PC = Address(nnn) + Address(m.Registers[0])
 	case 0xC000:
+		rand.Seed(time.Now().Unix())
+		rand := rand.Intn(int(nn))
+		m.Registers[vx] = byte(rand) & byte(nn)
 	case 0xD000:
 		// DXYN: Display
 		x := m.Registers[vx]
@@ -165,54 +195,65 @@ func (m *Machine) Decode(code uint16) {
 			}
 		}
 	case 0xE000:
+		switch code & 0x00FF {
+		case 0x9E:
+			key := uint16(m.Registers[vx])
+			if m.PressedKeys.Contains(key) {
+				m.PC += 2
+			}
+		case 0xA1:
+			key := uint16(m.Registers[vx])
+			if !m.PressedKeys.Contains(key) {
+				m.PC += 2
+			}
+		}
 	case 0xF000:
-	}
-}
+		switch code & 0x00FF {
+		case 0x07:
+			m.Registers[vx] = m.DelayTimer
+		case 0x15:
+			m.DelayTimer = m.Registers[vx]
+		case 0x18:
+			m.SoundTimer = m.Registers[vx]
+		case 0x1E:
+			m.Index += Address(m.Registers[vx])
+			if m.Index&0x1000 > 0 {
+				m.Registers[0xF] = 1
+			}
+		case 0x0A:
+			// FX0A get key: blocks and waits for key input
+			// decrement pc while the user has no tinputed any key
+			// blocks ans waits forthe user to input some key
+			key := <-m.Take
+			m.Registers[vx] = byte(key)
+		case 0x29:
+			// FX29 :Font character
+			// sets idex to address of character stored in VX
+			char := m.Registers[vx] & 0x0F
+			m.Index = Address(m.Memory[0x50+char])
+		case 0x33:
+			val := m.Registers[vx]
+			r := val % 10
+			val = val / 10
+			c := val % 10
+			val = val / 10
+			l := val % 10
 
-// LoadRom loads the application dataa to memory
-func (m *Machine) LoadRom(rom []byte) {
-	for i := 0; i < len(rom); i++ {
-		m.Memory[0x200+i] = rom[i]
-	}
-}
+			m.Memory[m.Index] = l
+			m.Memory[m.Index+1] = c
+			m.Memory[m.Index+2] = r
+		case 0x0055:
+			for i := Address(0); i <= Address(vx); i++ {
+				m.Memory[m.Index+i] = m.Registers[i]
+			}
+		case 0x0065:
+			for i := Address(0); i <= Address(vx); i++ {
+				m.Registers[i] = m.Memory[m.Index+i]
+			}
 
-// StartTimers starts the delay and sound timers.
-func (m *Machine) StartTimers() {
-	for {
-		// beep if above zero
-		if m.DelayTimer > 0 {
-			m.DelayTimer--
 		}
-		if m.DelayTimer > 0 {
-			m.DelayTimer--
-		}
-		time.Sleep(time.Second / 60)
+	default:
+		log.Printf("Invalid instruction: %04x", code)
+
 	}
-}
-
-// NewStack returns an empty stack
-func NewStack() *Stack {
-	return &Stack{
-		addr: make([]Address, 0, 16),
-		m:    sync.Mutex{},
-	}
-}
-
-// Push pushes an address onto the stack.
-func (s *Stack) Push(addr Address) {
-	s.m.Lock()
-	defer s.m.Unlock()
-
-	s.addr = append(s.addr, addr)
-}
-
-// Pop removes an address from the top of the stack.
-func (s *Stack) Pop() Address {
-	s.m.Lock()
-	defer s.m.Unlock()
-
-	tail := len(s.addr) - 1
-	elem := s.addr[tail]
-	s.addr = s.addr[:tail]
-	return elem
 }

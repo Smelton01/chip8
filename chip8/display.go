@@ -12,7 +12,7 @@ const (
 )
 
 type Model struct {
-	Chip8 *Machine
+	Chip8 *CPU
 }
 
 type Display struct {
@@ -52,14 +52,13 @@ func (m Model) Init() tea.Cmd {
 
 // Update is called when messages are received.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg.(type) {
+	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		return m, tea.Quit
+		if msg.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
+		m.Chip8.Key <- msg.String()
 	case tickMsg:
-		// m.M -= 1
-		// if m.M <= 0 {
-		// 	return m, tea.Quit
-		// }
 		return m, m.tick
 	}
 	return m, nil
@@ -76,9 +75,8 @@ func (m Model) View() string {
 	head := "Hi. First iteration of our Chip8 machine!\n"
 
 	var body bytes.Buffer
-	for i := 0; i < m.Chip8.Display.Cols; i++ {
-		body.WriteByte('-')
-	}
+
+	body.Write(bytes.Repeat([]byte{'-'}, m.Chip8.Display.Cols+2))
 	body.WriteRune('\n')
 	for y := 0; y < display.Rows; y++ {
 		body.WriteByte('|')
@@ -91,9 +89,7 @@ func (m Model) View() string {
 		}
 		body.WriteString("|\n")
 	}
-	for i := 0; i < m.Chip8.Display.Cols; i++ {
-		body.WriteByte('-')
-	}
+	body.Write(bytes.Repeat([]byte{'-'}, m.Chip8.Display.Cols+2))
 	return head + body.String()
 }
 
@@ -103,6 +99,5 @@ type tickMsg time.Time
 
 func (m *Model) tick() tea.Msg {
 	time.Sleep(time.Second / time.Duration(m.Chip8.Display.FPS))
-	m.Chip8.Cycle()
 	return tickMsg{}
 }

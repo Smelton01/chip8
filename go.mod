@@ -3,6 +3,7 @@ module github.com/smelton01/chip8
 go 1.18
 
 require (
+	github.com/azul3d/engine v0.0.0-20211024043305-793ea6c2839d // indirect
 	github.com/charmbracelet/bubbletea v0.20.0 // indirect
 	github.com/containerd/console v1.0.3 // indirect
 	github.com/davecgh/go-spew v1.1.0 // indirect
