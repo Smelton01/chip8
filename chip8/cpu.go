@@ -104,17 +104,17 @@ func (m *Machine) Decode(code uint16) {
 		m.Stack.Push(m.PC)
 		m.PC = Address(nnn)
 	case 0x3000:
-		if m.Memory[vx] == byte(nn) {
+		if m.Registers[vx] == byte(nn) {
 			m.PC += 2
 		}
 	case 0x4000:
-		if m.Memory[vx] != byte(nn) {
+		if m.Registers[vx] != byte(nn) {
 			m.PC += 2
 		}
 	case 0x5000:
 		switch code & 0x000F {
 		case 0x0:
-			if m.Memory[vx] == m.Memory[vy] {
+			if m.Registers[vx] == m.Registers[vy] {
 				m.PC += 2
 			}
 		}
