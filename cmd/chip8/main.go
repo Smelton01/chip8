@@ -12,7 +12,7 @@ const (
 	Rows       = 32
 	Cols       = 64
 	MemorySize = 4096
-	path       = "./assets/roms/IBM.ch8"
+	path       = "./assets/roms/Pong.ch8"
 )
 
 var Font = [][]byte{{0xF0, 0x90, 0x90, 0x90, 0xF0},
@@ -34,42 +34,33 @@ var Font = [][]byte{{0xF0, 0x90, 0x90, 0x90, 0xF0},
 }
 
 func main() {
-	// TODO add rom to flag
-	// Log to a file. Useful in debugging since you can't really log to stdout.
-	// Not required.
-	logfilePath := os.Getenv("BUBBLETEA_LOG")
-	if logfilePath != "" {
-		if _, err := tea.LogToFile(logfilePath, "simple"); err != nil {
-			log.Fatal(err)
-		}
+	display := chip8.Display{Rows: Rows, Cols: Cols, FPS: 30, Grid: make([]byte, Rows*Cols)}
+
+	take := make(chan uint16)
+	machine := chip8.CPU{
+		Memory:      make([]byte, MemorySize),
+		Stack:       chip8.NewStack(),
+		Frequency:   700,
+		PC:          0x200,
+		Registers:   make([]byte, 16),
+		Font:        Font,
+		Display:     display,
+		Key:         make(chan string),
+		Take:        take,
+		PressedKeys: chip8.NewKeys(),
 	}
+	model := chip8.Model{Chip8: &machine}
 
 	rom, err := os.ReadFile(path)
 	if err != nil {
 		panic(err)
 	}
-
-	display := chip8.Display{Rows: Rows, Cols: Cols, FPS: 30, Grid: make([]byte, Rows*Cols)}
-
-	machine := chip8.Machine{
-		Memory:    make([]byte, MemorySize),
-		Stack:     chip8.NewStack(),
-		Frequency: 7,
-		PC:        0x200,
-		Index:     0x00,
-		Registers: make([]byte, 16),
-		Font:      Font,
-		Display:   display,
-	}
-
 	machine.LoadRom(rom)
 	machine.LoadFont()
-	// TODO add cancellation option
 	go machine.StartTimers()
-
-	model := chip8.Model{Chip8: &machine}
 	go machine.Cycle()
-	// Initialize our program
+	go machine.ListenForKeys(take)
+
 	p := tea.NewProgram(model)
 	if err := p.Start(); err != nil {
 		log.Fatal(err)
