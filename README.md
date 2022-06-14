@@ -1,7 +1,7 @@
 # Chip8
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![CI](https://github.com/Smelton01/chip8/workflows/CI/badge.svg)](https://github.com/Smelton01/chip8/actions?query=workflow%3main)
+[![CI](https://github.com/Smelton01/chip8/actions/workflows/main.yaml/badge.svg)](https://github.com/Smelton01/chip8/actions/workflows/main.yaml)
 
 A Chip-8 interpreter written in Go.
 
