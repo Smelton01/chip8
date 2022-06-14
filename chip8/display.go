@@ -7,10 +7,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const (
-	cell = "█"
-)
-
 type Model struct {
 	Chip8 *CPU
 }
