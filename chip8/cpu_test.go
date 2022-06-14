@@ -39,7 +39,7 @@ func TestCPU(t *testing.T) {
 	}
 	for _, tt := range testCases {
 		t.Run(tt.desc, func(t *testing.T) {
-			machine := machine
+			machine.PC = 0x200
 			machine.LoadRom(tt.args.Instruction)
 			code := machine.Fetch()
 			assert.Equal(t, Address(0x202), machine.PC, "PC should increment")
